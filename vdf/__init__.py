@@ -271,6 +271,12 @@ class BASE_INT(int_type):
     def __repr__(self):
         return "%s(%d)" % (self.__class__.__name__, self)
 
+class UINT_32(BASE_INT):
+    pass
+
+class INT_32(BASE_INT):
+    pass
+
 class UINT_64(BASE_INT):
     pass
 
@@ -285,7 +291,7 @@ class COLOR(BASE_INT):
 
 BIN_NONE        = b'\x00'
 BIN_STRING      = b'\x01'
-BIN_INT32       = b'\x02'
+BIN_UINT32      = b'\x02'
 BIN_FLOAT32     = b'\x03'
 BIN_POINTER     = b'\x04'
 BIN_WIDESTRING  = b'\x05'
@@ -332,6 +338,7 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ra
         raise TypeError("Expected mapper to be subclass of dict, got %s" % type(mapper))
 
     # helpers
+    uint32 = struct.Struct('<I')
     int32 = struct.Struct('<i')
     uint64 = struct.Struct('<Q')
     int64 = struct.Struct('<q')
@@ -395,7 +402,7 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ra
             stack[-1][key] = read_string(fp)
         elif t == BIN_WIDESTRING:
             stack[-1][key] = read_string(fp, wide=True)
-        elif t in (BIN_INT32, BIN_POINTER, BIN_COLOR):
+        elif t in (BIN_POINTER, BIN_COLOR):
             val = int32.unpack(fp.read(int32.size))[0]
 
             if t == BIN_POINTER:
@@ -404,6 +411,8 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ra
                 val = COLOR(val)
 
             stack[-1][key] = val
+        elif t == BIN_UINT32:
+            stack[-1][key] = UINT_32(uint32.unpack(fp.read(uint32.size))[0])
         elif t == BIN_UINT64:
             stack[-1][key] = UINT_64(uint64.unpack(fp.read(int64.size))[0])
         elif t == BIN_INT64:
@@ -445,6 +454,7 @@ def _binary_dump_gen(obj, level=0, alt_format=False):
     if level == 0 and len(obj) == 0:
         return
 
+    uint32 = struct.Struct('<I')
     int32 = struct.Struct('<i')
     uint64 = struct.Struct('<Q')
     int64 = struct.Struct('<q')
@@ -464,6 +474,8 @@ def _binary_dump_gen(obj, level=0, alt_format=False):
             yield BIN_UINT64 + key + BIN_NONE + uint64.pack(value)
         elif isinstance(value, INT_64):
             yield BIN_INT64 + key + BIN_NONE + int64.pack(value)
+        elif isinstance(value, UINT_32):
+            yield BIN_UINT32 + key + BIN_NONE + uint32.pack(value)
         elif isinstance(value, string_type):
             try:
                 value = value.encode('utf-8') + BIN_NONE
@@ -474,13 +486,11 @@ def _binary_dump_gen(obj, level=0, alt_format=False):
             yield key + BIN_NONE + value
         elif isinstance(value, float):
             yield BIN_FLOAT32 + key + BIN_NONE + float32.pack(value)
-        elif isinstance(value, (COLOR, POINTER, int, int_type)):
+        elif isinstance(value, (COLOR, POINTER)):
             if isinstance(value, COLOR):
                 yield BIN_COLOR
             elif isinstance(value, POINTER):
                 yield BIN_POINTER
-            else:
-                yield BIN_INT32
             yield key + BIN_NONE
             yield int32.pack(value)
         else:
